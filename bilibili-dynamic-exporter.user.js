@@ -2,9 +2,9 @@
 // @name         B站动态提取导出器
 // @name:zh-CN   B站动态提取导出器
 // @namespace    https://github.com/UIM258/bilibili-dynamic-tools
-// @version      1.0.4
-// @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/视频/转发/文字/专栏/直播卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP（图片/表情/视频音频可选），含投票抽奖明细，支持分卷、进度与暂停续传
-// @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/视频/转发/文字/专栏/直播卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP（图片/表情/视频音频可选），含投票抽奖明细，支持分卷、进度与暂停续传
+// @version      1.1.0
+// @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
+// @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
 // @author       UIM258
 // @license      MIT
 // @icon         https://www.bilibili.com/favicon.ico
@@ -68,17 +68,30 @@
         if (major && major.opus && major.opus.summary && major.opus.summary.text) return { text: major.opus.summary.text, rich: major.opus.summary.rich_text_nodes || null };
         return null;
     }
+    function parseDurationSec(txt) {
+        if (!txt) return 0;
+        var p = String(txt).split(':').map(function (x) { return parseInt(x, 10) || 0; });
+        if (p.length === 3) return p[0] * 3600 + p[1] * 60 + p[2];
+        if (p.length === 2) return p[0] * 60 + p[1];
+        return p[0] || 0;
+    }
     function labelOf(it) {
         var t = it.type || '';
         var md = (it.modules && it.modules.module_dynamic) || {};
         var major = md.major || {};
         if (t === 'DYNAMIC_TYPE_FORWARD') return '转发';
-        if (t === 'DYNAMIC_TYPE_AV' || major.type === 'MAJOR_TYPE_ARCHIVE') return '视频';
+        if (major.type === 'MAJOR_TYPE_ARCHIVE' || t === 'DYNAMIC_TYPE_AV') {
+            var a = major.archive || {};
+            var badge = (a.badge && a.badge.text) || '';
+            var dur = parseDurationSec(a.duration_text);
+            if (badge.indexOf('小视频') > -1 || (dur > 0 && dur <= 60)) return '小视频';
+            return '视频';
+        }
         if (t === 'DYNAMIC_TYPE_ARTICLE' || major.type === 'MAJOR_TYPE_ARTICLE') return '专栏';
         if (t === 'DYNAMIC_TYPE_WORD') return '纯文字';
+        if (major.type === 'MAJOR_TYPE_MEDIALIST') return '收藏夹';
         if (major.type === 'MAJOR_TYPE_OPUS' || t === 'DYNAMIC_TYPE_DRAW' || t === 'DYNAMIC_TYPE_DYN') return '图文';
         if (major.type === 'MAJOR_TYPE_LIVE') return '直播';
-        if (major.type === 'MAJOR_TYPE_MEDIALIST') return '收藏';
         if (major.type === 'MAJOR_TYPE_COMMON') return '卡片';
         return '其他';
     }
@@ -116,6 +129,7 @@
         if (major.type === 'MAJOR_TYPE_ARCHIVE') {
             var a = major.archive || {};
             o.video = { title: a.title || '', bvid: a.bvid || '', pic: a.cover || a.pic || '', url: a.bvid ? ('https://www.bilibili.com/video/' + a.bvid) : '', duration: a.duration_text || '' };
+            o.isShort = (o.typeLabel === '小视频');
             if (!o.text) { o.text = a.title || ''; o.textPlain = a.title || ''; }
         } else if (major.type === 'MAJOR_TYPE_ARTICLE') {
             var ar = major.article || {};
@@ -188,13 +202,15 @@
     function kinds() {
         function ck(id) { var el = document.getElementById(id); return !!(el && el.checked); }
         return {
-            pic: ck('bdx-k-pic'), video: ck('bdx-k-video'), rt: ck('bdx-k-rt'),
-            word: ck('bdx-k-word'), article: ck('bdx-k-article'), other: ck('bdx-k-other')
+            pic: ck('bdx-k-pic'), fav: ck('bdx-k-fav'), video: ck('bdx-k-video'), short: ck('bdx-k-short'),
+            rt: ck('bdx-k-rt'), word: ck('bdx-k-word'), article: ck('bdx-k-article'), other: ck('bdx-k-other')
         };
     }
     function kindOf(label) {
-        if (label === '图文' || label === '收藏') return 'pic';
+        if (label === '图文') return 'pic';
+        if (label === '收藏夹') return 'fav';
         if (label === '视频') return 'video';
+        if (label === '小视频') return 'short';
         if (label === '转发') return 'rt';
         if (label === '纯文字') return 'word';
         if (label === '专栏') return 'article';
@@ -494,24 +510,41 @@
         });
     }
     // 解析一个视频的可下载文件（DASH: 视频+音频分离；durl: 合并文件）
-    async function resolveVideoFiles(bvid) {
+    async function resolveVideoFiles(bvid, qn, isShort) {
         var out = [];
         if (!bvid) return out;
+        var folder = isShort ? 'short_videos/' : 'video_files/';
         try {
             var v = await fetchJson('https://api.bilibili.com/x/web-interface/view?bvid=' + bvid);
             var cid = v && v.data && v.data.cid; if (!cid) return out;
-            var pj = await fetchJson('https://api.bilibili.com/x/player/playurl?bvid=' + bvid + '&cid=' + cid + '&fnval=16&qn=64&otype=json');
+            var want = (qn === 'auto' || !qn) ? 120 : Number(qn);
+            var pj = await fetchJson('https://api.bilibili.com/x/player/playurl?bvid=' + bvid + '&cid=' + cid + '&fnval=16&fourk=1&qn=' + want + '&otype=json');
             var d = pj && pj.data; if (!d) return out;
             if (d.durl && d.durl.length) {
-                d.durl.forEach(function (x, i) { out.push({ url: x.url, rel: 'video_files/' + bvid + (d.durl.length > 1 ? ('_' + (i + 1)) : '') + (/\.flv/i.test(x.url) ? '.flv' : '.mp4') }); });
-            } else if (d.dash) {
-                var vs = d.dash.video || [], as = d.dash.audio || [];
-                if (vs.length) out.push({ url: vs[0].baseUrl || vs[0].base_url, rel: 'video_files/' + bvid + '_video.m4s' });
-                if (as.length) out.push({ url: as[0].baseUrl || as[0].base_url, rel: 'video_files/' + bvid + '_audio.m4s' });
+                d.durl.forEach(function (x, i) { out.push({ url: x.url, rel: folder + bvid + (d.durl.length > 1 ? ('_' + (i + 1)) : '') + (/\.flv/i.test(x.url) ? '.flv' : '.mp4'), qn: want }); });
+                return out;
+            }
+            if (d.dash) {
+                var vids = (d.dash.video || []).filter(function (x) { return x.baseUrl || x.base_url; });
+                var avc = vids.filter(function (x) { return /^avc1/i.test(x.codecs || ''); });
+                var pool = avc.length ? avc : vids;
+                var chosen = null;
+                if (pool.length) {
+                    if (qn === 'auto' || !qn) chosen = pool.reduce(function (a, b) { return (b.height > (a ? a.height : 0)) ? b : a; }, null);
+                    else {
+                        var eligible = pool.filter(function (x) { return Number(x.id) <= want; });
+                        chosen = eligible.length ? eligible.reduce(function (a, b) { return Number(b.id) > Number(a.id) ? b : a; }) : pool.reduce(function (a, b) { return Number(b.id) < Number(a.id) ? b : a; });
+                    }
+                }
+                var as = (d.dash.audio || []).filter(function (x) { return x.baseUrl || x.base_url; });
+                var aud = as.length ? as.reduce(function (a, b) { return (Number(b.bandwidth) > Number(a.bandwidth)) ? b : a; }) : null;
+                if (chosen) out.push({ url: chosen.baseUrl || chosen.base_url, rel: folder + bvid + '_' + (chosen.id || want) + '_video.m4s', qn: chosen.id });
+                if (aud) out.push({ url: aud.baseUrl || aud.base_url, rel: folder + bvid + '_audio.m4s', qn: chosen ? chosen.id : want });
             }
         } catch (e) { console.warn('视频地址解析失败', bvid, e); }
         return out;
     }
+
     async function resolveMusicFile(sid) {
         if (!sid) return null;
         try {
@@ -567,8 +600,9 @@
                 var vp = S.posts[vi];
                 if (vp.video && vp.video.bvid && !seenV[vp.video.bvid]) {
                     seenV[vp.video.bvid] = 1;
-                    setStatus('解析视频地址 ' + vp.video.bvid + ' …');
-                    var vf = await resolveVideoFiles(vp.video.bvid);
+                    var qnVal = (els.vq && els.vq.value) || 'auto';
+                    setStatus('解析视频地址 ' + vp.video.bvid + '（清晰度 ' + qnVal + '）…');
+                    var vf = await resolveVideoFiles(vp.video.bvid, qnVal, vp.typeLabel === '小视频');
                     vf.forEach(function (x, i) { add(x.url, x.rel, i === 0 ? ('video:' + vp.video.bvid) : null); });
                     await sleep(200);
                 }
@@ -591,84 +625,73 @@
         if (zJson) entries.push({ name: root + '/messages.json', data: new TextEncoder().encode(buildJSON()) });
         if (zCsv) entries.push({ name: root + '/messages.csv', data: new TextEncoder().encode(buildCSV()) });
         if (failed.length) entries.push({ name: root + '/media_links.txt', data: new TextEncoder().encode('以下 ' + failed.length + ' 个媒体未能自动下载：\n' + failed.join('\n') + '\n') });
-        var hasVideo = entries.some(function (en) { return en.name.indexOf('/video_files/') > -1 && /_video\.m4s$/.test(en.name); });
+        var hasVideo = entries.some(function (en) { return (en.name.indexOf('/video_files/') > -1 || en.name.indexOf('/short_videos/') > -1) && /_video\.m4s$/.test(en.name); });
         if (hasVideo) {
             var CRLF = String.fromCharCode(13, 10);
+            var CRLF = String.fromCharCode(13, 10);
+            var BS = String.fromCharCode(92);
             var bat = [
                 '@echo off',
-                'setlocal',
+                'setlocal enabledelayedexpansion',
                 'chcp 65001 >nul',
                 'cd /d "%~dp0"',
-                'echo ============================================',
-                'echo   B站视频合并工具',
-                'echo ============================================',
-                'echo 当前目录: %CD%',
-                'echo.',
+                'echo ==== B站视频合并工具 ====',
                 'where ffmpeg >nul 2>nul',
                 'if errorlevel 1 (',
-                '  echo [错误] 未找到 ffmpeg。',
-                '  echo 请先安装: winget install Gyan.FFmpeg',
-                '  echo 安装后请重新打开窗口再运行本脚本。',
-                '  echo.',
-                '  pause',
-                '  exit /b 1',
-                ')',
-                'if not exist "video_files" (',
-                '  echo [错误] 当前目录下没有 video_files 文件夹。',
-                '  echo 请先完整解压 ZIP，再在此文件夹内运行本脚本。',
-                '  echo.',
+                '  echo [错误] 未找到 ffmpeg。请先安装: winget install Gyan.FFmpeg',
                 '  pause',
                 '  exit /b 1',
                 ')',
                 'set count=0',
-                'for %%f in (video_files\\*_video.m4s) do (',
-                '  set "base=%%~nf"',
-                '  setlocal enabledelayedexpansion',
-                '  set "name=!base:_video=!"',
-                '  if exist "video_files\\!name!_audio.m4s" (',
-                '    echo [合并] !name!',
-                '    ffmpeg -y -hide_banner -loglevel warning -i "video_files\\!name!_video.m4s" -i "video_files\\!name!_audio.m4s" -c copy "video_files\\!name!.mp4"',
-                '    if errorlevel 1 (echo [失败] !name!) else (echo [完成] video_files\\!name!.mp4)',
-                '  ) else (',
-                '    echo [仅视频] !name! 没有对应音频，导出无声视频',
-                '    ffmpeg -y -hide_banner -loglevel warning -i "video_files\\!name!_video.m4s" -c copy "video_files\\!name!_video_only.mp4"',
+                'for %%d in (video_files short_videos) do (',
+                '  if exist "%%d" (',
+                '    for %%f in ("%%d' + BS + '*_video.m4s") do (',
+                '      set "base=%%~nf"',
+                '      set "name=!base:_video=!"',
+                '      if exist "%%d' + BS + '!name!_audio.m4s" (',
+                '        echo [合并] %%d' + BS + '!name!',
+                '        ffmpeg -y -hide_banner -loglevel warning -i "%%d' + BS + '!name!_video.m4s" -i "%%d' + BS + '!name!_audio.m4s" -c copy "%%d' + BS + '!name!.mp4"',
+                '      ) else (',
+                '        echo [仅视频] %%d' + BS + '!name!',
+                '        ffmpeg -y -hide_banner -loglevel warning -i "%%d' + BS + '!name!_video.m4s" -c copy "%%d' + BS + '!name!_video_only.mp4"',
+                '      )',
+                '      set /a count+=1',
+                '    )',
                 '  )',
-                '  endlocal',
-                '  set /a count+=1',
                 ')',
                 'echo.',
-                'echo 共处理 %count% 个视频。输出在 video_files 目录。',
-                'echo.',
+                'echo 共处理 !count! 个视频，输出在各目录。',
                 'pause'
             ].join(CRLF);
             var ps1 = [
                 "$ErrorActionPreference = 'Stop'",
-                "Set-Location -LiteralPath $PSScriptRoot",
-                "Write-Host '=== B站视频合并工具 ==='",
-                "if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {",
+                'Set-Location -LiteralPath $PSScriptRoot',
+                "Write-Host '=== B站视频合并工具 ===' -ForegroundColor Cyan",
+                'if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {',
                 "  Write-Host '[错误] 未找到 ffmpeg，请先安装：winget install Gyan.FFmpeg' -ForegroundColor Red",
                 "  Read-Host '按回车退出'",
-                "  exit 1",
-                "}",
-                "\$dir = Join-Path \$PSScriptRoot 'video_files'",
-                "if (-not (Test-Path -LiteralPath \$dir)) { Write-Host '[错误] 没有 video_files 文件夹，请先完整解压 ZIP' -ForegroundColor Red; Read-Host '按回车退出'; exit 1 }",
-                "\$vids = Get-ChildItem -LiteralPath \$dir -Filter '*_video.m4s' -ErrorAction SilentlyContinue",
-                "if (-not \$vids) { Write-Host '[提示] video_files 下没有 *_video.m4s（导出时未勾选“下载视频/音频文件”？）' -ForegroundColor Yellow; Read-Host '按回车退出'; exit 0 }",
-                "foreach (\$v in \$vids) {",
-                "  \$name = \$v.BaseName -replace '_video$',''",
-                "  \$audio = Join-Path \$dir (\$name + '_audio.m4s')",
-                "  if (Test-Path -LiteralPath \$audio) {",
-                "    Write-Host ('[合并] ' + \$name)",
-                "    ffmpeg -y -hide_banner -loglevel warning -i \$v.FullName -i \$audio -c copy (Join-Path \$dir (\$name + '.mp4'))",
-                "  } else {",
-                "    Write-Host ('[仅视频] ' + \$name + ' 无音频')",
-                "    ffmpeg -y -hide_banner -loglevel warning -i \$v.FullName -c copy (Join-Path \$dir (\$name + '_video_only.mp4'))",
-                "  }",
-                "}",
-                "Write-Host '全部完成，输出在 video_files 目录。' -ForegroundColor Green",
+                '  exit 1',
+                '}',
+                "@('video_files','short_videos') | ForEach-Object {",
+                '  $d = Join-Path $PSScriptRoot $_',
+                '  if (-not (Test-Path -LiteralPath $d)) { return }',
+                "  $vids = Get-ChildItem -LiteralPath $d -Filter '*_video.m4s' -ErrorAction SilentlyContinue",
+                '  foreach ($v in $vids) {',
+                "    $name = $v.BaseName -replace '_video$',''",
+                "    $audio = Join-Path $d ($name + '_audio.m4s')",
+                '    if (Test-Path -LiteralPath $audio) {',
+                "      Write-Host ('[合并] ' + $v.Directory.Name + ' / ' + $name)",
+                "      ffmpeg -y -hide_banner -loglevel warning -i $v.FullName -i $audio -c copy (Join-Path $d ($name + '.mp4'))",
+                '    } else {',
+                "      Write-Host ('[仅视频] ' + $name + ' 无音频') -ForegroundColor Yellow",
+                "      ffmpeg -y -hide_banner -loglevel warning -i $v.FullName -c copy (Join-Path $d ($name + '_video_only.mp4'))",
+                '    }',
+                '  }',
+                '}',
+                "Write-Host '全部完成，输出在各视频目录。' -ForegroundColor Green",
                 "Read-Host '按回车退出'"
             ].join(CRLF);
-            var note = ['B站视频为 DASH 分离流（视频/音频各一个 .m4s），需要合并才能得到带声音的 mp4。', '', '用法：', '1. 先把 ZIP 完整解压到一个文件夹', '2. 安装 ffmpeg：winget install Gyan.FFmpeg（安装后需重开窗口）', '3. 双击「合并视频.bat」；若 bat 闪退，右键用 PowerShell 运行「合并视频.ps1」', '4. 合并结果：video_files\\<BV号>.mp4', '', '若提示“没有 *_video.m4s”：说明导出时未勾选“下载视频/音频文件”，或媒体下载失败（见 media_links.txt）。'].join(CRLF);
+            var note = ['B站视频为 DASH 分离流（视频/音频各一个 .m4s），需要合并才能得到带声音的 mp4。', '', '两个目录都会处理：video_files（视频）/ short_videos（小视频）。', '', '用法：', '1. 先把 ZIP 完整解压到一个文件夹', '2. 安装 ffmpeg：winget install Gyan.FFmpeg（安装后需重开窗口）', '3. 双击「合并视频.bat」；若 bat 闪退，右键用 PowerShell 运行「合并视频.ps1」', '4. 合并结果：各目录下的 <BV号>.mp4', '', '若提示没有 *_video.m4s：说明导出时未勾选“下载视频/音频文件”，或媒体下载失败（见 media_links.txt）。'].join(CRLF);
             entries.push({ name: root + '/合并视频.bat', data: new TextEncoder().encode(bat) });
             entries.push({ name: root + '/合并视频.ps1', data: new TextEncoder().encode(ps1) });
             entries.push({ name: root + '/合并视频-说明.txt', data: new TextEncoder().encode(note) });
@@ -698,6 +721,10 @@
         #bdx-progress { padding: 4px 14px; font-size: 13px; color: #00aeec; }
         #bdx-status { padding: 8px 14px; font-size: 12px; color: #888; border-top: 1px solid #f0f0f0; background: #fafafa; }
         #bdx-status.bdx-err { color: #d33; }
+        .bdx-note { padding: 2px 14px 6px; font-size: 11px; color: #999; line-height: 1.5; }
+        #bdx-bar select, .bdx-row select { border: 1px solid #d9d9d9; border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+        #bdx-overlay.bdx-dark .bdx-note { color: #8a8a90; }
+        #bdx-overlay.bdx-dark #bdx-bar select, #bdx-overlay.bdx-dark .bdx-row select { background: #26262b; border-color: #3a3a40; color: #d6d6da; }
         #bdx-dl { padding: 8px 14px 14px; border-top: 1px solid #eee; }
         #bdx-close { margin-left: auto; border: none !important; background: transparent !important; font-size: 22px; color: #888; }
         #bdx-overlay.bdx-dark #bdx-panel { background: #1e1e22; color: #e8e8ea; }
@@ -724,16 +751,20 @@
             '    <label>间隔ms</label><input id="bdx-delay" type="number" min="150" step="50" value="450"/>' +
             '    <button id="bdx-close" title="关闭">×</button>' +
             '  </div>' +
-            '  <div class="bdx-row">' +
-            '    <label class="chk"><input type="checkbox" id="bdx-k-pic" checked/>图文/收藏</label>' +
-            '    <label class="chk"><input type="checkbox" id="bdx-k-video" checked/>视频/小视频</label>' +
-            '    <label class="chk"><input type="checkbox" id="bdx-k-rt" checked/>转发</label>' +
-            '    <label class="chk"><input type="checkbox" id="bdx-k-word" checked/>纯文字</label>' +
-            '    <label class="chk"><input type="checkbox" id="bdx-k-article" checked/>专栏</label>' +
-            '    <label class="chk"><input type="checkbox" id="bdx-k-other" checked/>直播/卡片</label>' +
+            '  <div class="bdx-row">内容类型：' +
+            '    <label class="chk" title="带图片的动态 / 相册（含 opus 图片动态）"><input type="checkbox" id="bdx-k-pic" checked/>图文</label>' +
+            '    <label class="chk" title="B站收藏夹 / 合集动态（MAJOR_TYPE_MEDIALIST）"><input type="checkbox" id="bdx-k-fav" checked/>收藏夹</label>' +
+            '    <label class="chk" title="投稿视频（BV）"><input type="checkbox" id="bdx-k-video" checked/>视频</label>' +
+            '    <label class="chk" title="竖屏短视频（按标识或时长≤60秒识别）"><input type="checkbox" id="bdx-k-short" checked/>小视频</label>' +
+            '    <label class="chk" title="转发的动态"><input type="checkbox" id="bdx-k-rt" checked/>转发</label>' +
+            '    <label class="chk" title="没有媒体的纯文字动态"><input type="checkbox" id="bdx-k-word" checked/>纯文字</label>' +
+            '    <label class="chk" title="长文章（导出标题 / 封面 / cv 链接）"><input type="checkbox" id="bdx-k-article" checked/>专栏</label>' +
+            '    <label class="chk" title="动态里附带的卡片：直播分享、游戏/评分/榜单等"><input type="checkbox" id="bdx-k-other" checked/>其他卡片</label>' +
             '  </div>' +
+            '  <div class="bdx-note">说明：收藏夹 = B站「合集/收藏夹」动态；小视频 = 按时长或标识判断；专栏导出标题/封面/链接（不抓正文全文）；其他卡片 = 直播/游戏/评分/榜单等非独立动态</div>' +
             '  <div class="bdx-row">媒体：' +
-            '    <label class="chk"><input type="checkbox" id="bdx-media-video"/>下载视频/音频文件（体积大）</label>' +
+            '    <label class="chk"><input type="checkbox" id="bdx-media-video"/>下载视频/音频文件</label>' +
+            '    <label class="chk">清晰度 <select id="bdx-vq"><option value="auto">自动(最高)</option><option value="112">1080P+</option><option value="80">1080P</option><option value="64" selected>720P</option><option value="32">480P</option><option value="16">360P</option></select></label>' +
             '    <label class="chk"><input type="checkbox" id="bdx-media-emoticon" checked/>打包表情图片</label>' +
             '  </div>' +
             '  <div class="bdx-row">外观：' +
@@ -764,7 +795,7 @@
         els.progress = ov.querySelector('#bdx-progress'); els.status = ov.querySelector('#bdx-status');
         els.chkZHtml = ov.querySelector('#bdx-z-html'); els.chkZJson = ov.querySelector('#bdx-z-json'); els.chkZCsv = ov.querySelector('#bdx-z-csv');
         els.chkSplit = ov.querySelector('#bdx-split'); els.splitN = ov.querySelector('#bdx-split-n');
-        els.chkVideoMedia = ov.querySelector('#bdx-media-video'); els.chkEmoticon = ov.querySelector('#bdx-media-emoticon');
+        els.chkVideoMedia = ov.querySelector('#bdx-media-video'); els.chkEmoticon = ov.querySelector('#bdx-media-emoticon'); els.vq = ov.querySelector('#bdx-vq');
         els.close = ov.querySelector('#bdx-close');
         els.start.addEventListener('click', start);
         els.pause.addEventListener('click', pause);
