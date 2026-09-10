@@ -59,7 +59,7 @@ MIT 协议，© 2026 UIM258。
 ├── media\covers\    ← 视频 / 文章封面
 ├── media\avatar     ← 作者头像
 ├── emoticons\       ← 表情图片
-├── video_files\     ← 视频 / 音频（DASH .m4s，含清晰度编号）\n├── short_videos\    ← 小视频 / 音频\n├── articles\        ← 专栏全文 HTML\n├── articles\images\ ← 专栏正文图片
+├── video_files\     ← 视频 / 音频（DASH .m4s，以 BV 号命名）\n├── short_videos\    ← 小视频 / 音频\n├── articles\        ← 专栏全文 HTML\n├── articles\images\ ← 专栏正文图片
 ├── 合并视频.bat      ← 用 ffmpeg 合并为 mp4
 └── media_links.txt  ← 抓取失败媒体直链兜底
 ```

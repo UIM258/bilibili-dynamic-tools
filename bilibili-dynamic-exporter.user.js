@@ -2,7 +2,7 @@
 // @name         B站动态提取导出器
 // @name:zh-CN   B站动态提取导出器
 // @namespace    https://github.com/UIM258/bilibili-dynamic-tools
-// @version      1.3.0
+// @version      1.4.0
 // @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、本地视频直达、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
 // @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、本地视频直达、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
 // @author       UIM258
@@ -45,6 +45,7 @@
     function fmtTs(sec) { if (!sec) return ''; var d = new Date(Number(sec) * 1000); if (isNaN(d.getTime())) return ''; return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
     function dateOfTs(sec) { var s = fmtTs(sec); return s ? s.slice(0, 10) : ''; }
     function fmtNow() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + '_' + pad(d.getHours()) + '-' + pad(d.getMinutes()) + '-' + pad(d.getSeconds()); }
+    function statCount(x) { if (x == null) return 0; if (typeof x === 'object') return Number(x.count || 0) || 0; return Number(x) || 0; }
     function fmtNum(v) { var n = Number(v) || 0; return n >= 100000000 ? (n / 100000000).toFixed(1) + '亿' : (n >= 10000 ? (n / 10000).toFixed(1) + '万' : String(n)); }
     function esc(s) { return String(s === undefined || s === null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
     function plainText(h) { return String(h || ''); }
@@ -117,9 +118,9 @@
             author: au.name || '',
             face: au.face || '',
             url: it.id_str ? ('https://t.bilibili.com/' + it.id_str) : '',
-            reposts: Number(stat.forward || 0),
-            comments: Number(stat.comment || 0),
-            likes: Number(stat.like || 0)
+            reposts: statCount(stat.forward),
+            comments: statCount(stat.comment),
+            likes: statCount(stat.like)
         };
         var src = pickText(md, major);
         if (src) { o.text = src.text || ''; o.rich = src.rich || null; o.textPlain = stripRich(src.rich, src.text); }
@@ -271,6 +272,21 @@
                 if (!matchPost(p)) continue;
                 if (!S.name && p.author) S.name = p.author;
                 if (!S.avatar && p.face) S.avatar = p.face;
+                if (p.typeLabel === '专栏' && (!p.article || !p.article.id)) {
+                    try {
+                        setStatus('解析专栏信息…');
+                        var dj = await fetchJson('https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id=' + p.dynId);
+                        var ditem = dj && dj.data && dj.data.item;
+                        var dmaj = ditem && ditem.modules && ditem.modules.module_dynamic && ditem.modules.module_dynamic.major;
+                        var dar = dmaj && dmaj.article;
+                        if (dar && dar.id) {
+                            var jump = dar.jump_url || '';
+                            if (jump.indexOf('//') === 0) jump = 'https:' + jump;
+                            p.article = { id: dar.id, title: dar.title || '', cover: (dar.covers && dar.covers[0] && (dar.covers[0].url || dar.covers[0])) || '', url: jump || ('https://www.bilibili.com/read/cv' + dar.id) };
+                        }
+                    } catch (e) { console.warn('专栏信息解析失败', p.dynId, e); }
+                    await sleep(150);
+                }
                 if (p.article && p.article.id) {
                     try {
                         setStatus('抓取专栏全文 cv' + p.article.id + ' …');
@@ -387,7 +403,7 @@
                 h += '</div>';
             }
             if (p.video) { h += '<div class="video"><img src="' + esc(lu(p.video.pic)) + '" alt=""/><a href="' + esc(p.video.url) + '" target="_blank" rel="noopener">' + esc(p.video.title) + '</a>'; var vl = (cfg.map && p.video.bvid) ? cfg.map['video:' + p.video.bvid] : ''; if (vl) { var mp4 = vl.replace(/_video\.m4s$/, '.mp4'); h += '<a class="loc" href="' + esc(mp4) + '" target="_blank" rel="noopener" title="运行合并视频.bat 后可直接播放">▶ 本地视频(合并后)</a>'; } h += '</div>'; }
-            if (p.article) { var al = (cfg.offline && cfg.map && p.article.id) ? cfg.map['article:' + p.article.id] : ''; h += '<div class="art"><a href="' + esc(al || p.article.url) + '" target="_blank" rel="noopener">' + esc(p.article.title) + (al ? '（本地全文）' : '') + '</a></div>'; }
+            if (p.article) { var al = (cfg.offline && cfg.map && p.article.id) ? cfg.map['article:' + p.article.id] : ''; h += '<div class="art"><a href="' + esc(al || p.article.url) + '" target="_blank" rel="noopener">' + esc(p.article.title) + '</a><span class="artlink">' + (al ? '（本地全文 ↗）' : '（在线全文 ↗）') + '</span></div>'; }
             if (p.medialist) h += '<div class="art"><a href="' + esc(p.medialist.url) + '" target="_blank" rel="noopener">收藏：' + esc(p.medialist.title) + '</a></div>';
             if (p.add) {
                 h += '<div class="add">' + (p.add.badge ? '<b>' + esc(p.add.badge) + '</b>' : '') + esc(p.add.title) + (p.add.desc ? '<small>' + esc(p.add.desc) + '</small>' : '') + (p.add.url ? '<a href="' + esc(p.add.url) + '" target="_blank">查看 ↗</a>' : '');
@@ -457,7 +473,7 @@
             '.imgs img{width:100%;height:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--soft);}', '.imgs.one img{aspect-ratio:auto;max-height:460px;object-fit:contain;}',
             '.video{display:flex;gap:10px;align-items:center;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:8px;text-decoration:none;color:var(--text);}',
             '.video img{width:120px;height:70px;object-fit:cover;border-radius:4px;background:var(--soft);}',
-            '.art{margin-top:8px;padding:10px;background:var(--soft);border-radius:8px;}', '.art a{color:var(--blue);text-decoration:none;}',
+            '.art{margin-top:8px;padding:10px;background:var(--soft);border-radius:8px;}', '.art a{color:var(--blue);text-decoration:none;}', '.art .artlink{color:var(--muted);font-size:12px;margin-left:6px;}',
             '.add{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;}', '.add small{width:100%;color:var(--muted);}', '.add .addopts{width:100%;margin:4px 0 0;padding-left:18px;}', '.add .addopts li{font-size:13px;margin:2px 0;}', '.add .addopts b{color:var(--pink);}', '.add .addprize{width:100%;font-size:12px;color:var(--muted);}', '.add b{color:var(--pink);font-size:11px;}', '.add a{color:var(--blue);text-decoration:none;}',
             '.fwd{margin-top:8px;padding:10px 12px;background:var(--soft);border-radius:8px;}', '.fh{color:var(--pink);font-size:13px;margin-bottom:4px;}', '.ft{font-size:13px;color:var(--muted);line-height:1.6;}', '.fv{font-size:12px;margin-top:4px;}', '.fv a{color:var(--blue);text-decoration:none;}',
             '.stats{display:flex;gap:14px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);}', '.stats .go{margin-left:auto;color:var(--pink);text-decoration:none;}'
@@ -573,9 +589,9 @@
                 }
                 var as = (d.dash.audio || []).filter(function (x) { return x.baseUrl || x.base_url; });
                 var aud = as.length ? as.reduce(function (a, b) { return (Number(b.bandwidth) > Number(a.bandwidth)) ? b : a; }) : null;
-                if (chosen) out.push({ url: chosen.baseUrl || chosen.base_url, rel: folder + bvid + '_' + (chosen.id || want) + '_video.m4s', qn: chosen.id });
+                if (chosen) out.push({ url: chosen.baseUrl || chosen.base_url, rel: folder + bvid + '_video.m4s', qn: chosen.id });
                 var qid = chosen ? (chosen.id || want) : want;
-                if (aud) out.push({ url: aud.baseUrl || aud.base_url, rel: folder + bvid + '_' + qid + '_audio.m4s', qn: qid });
+                if (aud) out.push({ url: aud.baseUrl || aud.base_url, rel: folder + bvid + '_audio.m4s', qn: qid });
             }
         } catch (e) { console.warn('视频地址解析失败', bvid, e); }
         return out;
