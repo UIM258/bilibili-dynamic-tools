@@ -2,7 +2,7 @@
 // @name         B站动态提取导出器
 // @name:zh-CN   B站动态提取导出器
 // @namespace    https://github.com/UIM258/bilibili-dynamic-tools
-// @version      1.0.3
+// @version      1.0.4
 // @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/视频/转发/文字/专栏/直播卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP（图片/表情/视频音频可选），含投票抽奖明细，支持分卷、进度与暂停续传
 // @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/视频/转发/文字/专栏/直播卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP（图片/表情/视频音频可选），含投票抽奖明细，支持分卷、进度与暂停续传
 // @author       UIM258
@@ -621,17 +621,17 @@
                 '  exit /b 1',
                 ')',
                 'set count=0',
-                'for %%f in (video_files\*_video.m4s) do (',
+                'for %%f in (video_files\\*_video.m4s) do (',
                 '  set "base=%%~nf"',
                 '  setlocal enabledelayedexpansion',
                 '  set "name=!base:_video=!"',
-                '  if exist "video_files\!name!_audio.m4s" (',
+                '  if exist "video_files\\!name!_audio.m4s" (',
                 '    echo [合并] !name!',
-                '    ffmpeg -y -hide_banner -loglevel warning -i "video_files\!name!_video.m4s" -i "video_files\!name!_audio.m4s" -c copy "video_files\!name!.mp4"',
-                '    if errorlevel 1 (echo [失败] !name!) else (echo [完成] video_files\!name!.mp4)',
+                '    ffmpeg -y -hide_banner -loglevel warning -i "video_files\\!name!_video.m4s" -i "video_files\\!name!_audio.m4s" -c copy "video_files\\!name!.mp4"',
+                '    if errorlevel 1 (echo [失败] !name!) else (echo [完成] video_files\\!name!.mp4)',
                 '  ) else (',
                 '    echo [仅视频] !name! 没有对应音频，导出无声视频',
-                '    ffmpeg -y -hide_banner -loglevel warning -i "video_files\!name!_video.m4s" -c copy "video_files\!name!_video_only.mp4"',
+                '    ffmpeg -y -hide_banner -loglevel warning -i "video_files\\!name!_video.m4s" -c copy "video_files\\!name!_video_only.mp4"',
                 '  )',
                 '  endlocal',
                 '  set /a count+=1',
