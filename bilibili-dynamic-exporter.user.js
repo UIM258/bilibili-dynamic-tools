@@ -2,14 +2,13 @@
 // @name         B站动态提取导出器
 // @name:zh-CN   B站动态提取导出器
 // @namespace    https://github.com/UIM258/bilibili-dynamic-tools
-// @version      1.0.0
+// @version      1.0.1
 // @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/视频/转发/文字/专栏/直播卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP（图片/表情/视频音频可选），含投票抽奖明细，支持分卷、进度与暂停续传
 // @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/视频/转发/文字/专栏/直播卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP（图片/表情/视频音频可选），含投票抽奖明细，支持分卷、进度与暂停续传
 // @author       UIM258
 // @license      MIT
 // @icon         https://www.bilibili.com/favicon.ico
-// @match        https://space.bilibili.com/*/dynamic
-// @match        https://space.bilibili.com/*/dynamics
+// @match        https://space.bilibili.com/*
 // @run-at       document-idle
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
@@ -19,7 +18,7 @@
 (function () {
     'use strict';
     var TAG = '[B站导出]';
-    var m = location.pathname.match(/^\/(\d+)\/dynamic/);
+    var m = location.pathname.match(/^\/(\d+)(?:\/|$)/);
     if (!m) { return; }
     var UID = m[1];
 
@@ -725,7 +724,7 @@
     }
     function keepAlive() {
         setInterval(function () {
-            if (!document.getElementById('bdx-launcher') && location.pathname.match(/^\/(\d+)\/dynamic/)) {
+            if (!document.getElementById('bdx-launcher') && location.pathname.match(/^\/(\d+)(?:\/|$)/)) {
                 var b = document.createElement('button'); b.id = 'bdx-launcher'; b.textContent = '导出动态';
                 b.addEventListener('click', function () { els.overlay.classList.add('bdx-open'); });
                 document.body.appendChild(b);

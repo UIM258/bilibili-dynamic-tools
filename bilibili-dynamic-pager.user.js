@@ -2,14 +2,13 @@
 // @name         B站动态分页浏览
 // @name:zh-CN   B站动态分页浏览
 // @namespace    https://github.com/UIM258/bilibili-dynamic-tools
-// @version      1.0.0
+// @version      1.0.1
 // @description  B站用户空间动态分页浏览：本地分页/上一页下一页/按日期直达/直达最早；支持图文/视频/转发/专栏等全格式、表情(收藏集/装扮)、装扮徽章、附加卡片、图片灯箱、暗色模式
 // @description:zh-CN  B站用户空间动态分页浏览：本地分页/上一页下一页/按日期直达/直达最早；支持图文/视频/转发/专栏等全格式、表情(收藏集/装扮)、装扮徽章、附加卡片、图片灯箱、暗色模式
 // @author       UIM258
 // @license      MIT
 // @icon         https://www.bilibili.com/favicon.ico
-// @match        https://space.bilibili.com/*/dynamic
-// @match        https://space.bilibili.com/*/dynamics
+// @match        https://space.bilibili.com/*
 // @run-at       document-idle
 // @grant        GM_addStyle
 // @noframes
@@ -18,7 +17,7 @@
 (function () {
     'use strict';
     var TAG = '[B站动态分页]';
-    var m = location.pathname.match(/^\/(\d+)\/dynamic/);
+    var m = location.pathname.match(/^\/(\d+)(?:\/|$)/);
     if (!m) { return; }
     var UID = m[1];
 
@@ -659,7 +658,7 @@
 
     function keepAlive() {
         setInterval(function () {
-            if (!document.getElementById('bdp-launcher') && location.pathname.match(/^\/(\d+)\/dynamic/)) {
+            if (!document.getElementById('bdp-launcher') && location.pathname.match(/^\/(\d+)(?:\/|$)/)) {
                 var b = document.createElement('button');
                 b.id = 'bdp-launcher'; b.textContent = '动态分页';
                 b.addEventListener('click', openPanel);
