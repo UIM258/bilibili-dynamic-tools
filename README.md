@@ -7,6 +7,15 @@
 
 MIT 协议，© 2026 UIM258。
 
+## 效果预览
+
+分页浏览（以 @永雏塔菲 的主页为例）：
+
+![B站动态分页浏览](assets/pager-preview.png)
+
+提取导出器（日期范围 + 类型/媒体勾选）：
+
+![B站动态提取导出器](assets/exporter-preview.png)
 ## 安装
 
 - 浏览器安装 [Tampermonkey](https://www.tampermonkey.net/)
