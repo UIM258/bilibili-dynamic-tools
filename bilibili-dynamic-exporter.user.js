@@ -2,7 +2,7 @@
 // @name         B站动态提取导出器
 // @name:zh-CN   B站动态提取导出器
 // @namespace    https://github.com/UIM258/bilibili-dynamic-tools
-// @version      1.4.0
+// @version      1.5.0
 // @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、本地视频直达、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
 // @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、本地视频直达、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
 // @author       UIM258
@@ -402,8 +402,8 @@
                 });
                 h += '</div>';
             }
-            if (p.video) { h += '<div class="video"><img src="' + esc(lu(p.video.pic)) + '" alt=""/><a href="' + esc(p.video.url) + '" target="_blank" rel="noopener">' + esc(p.video.title) + '</a>'; var vl = (cfg.map && p.video.bvid) ? cfg.map['video:' + p.video.bvid] : ''; if (vl) { var mp4 = vl.replace(/_video\.m4s$/, '.mp4'); h += '<a class="loc" href="' + esc(mp4) + '" target="_blank" rel="noopener" title="运行合并视频.bat 后可直接播放">▶ 本地视频(合并后)</a>'; } h += '</div>'; }
-            if (p.article) { var al = (cfg.offline && cfg.map && p.article.id) ? cfg.map['article:' + p.article.id] : ''; h += '<div class="art"><a href="' + esc(al || p.article.url) + '" target="_blank" rel="noopener">' + esc(p.article.title) + '</a><span class="artlink">' + (al ? '（本地全文 ↗）' : '（在线全文 ↗）') + '</span></div>'; }
+            if (p.video) { h += '<div class="video"><img src="' + esc(lu(p.video.pic)) + '" alt=""/><a href="' + esc(p.video.url) + '" target="_blank" rel="noopener">' + esc(p.video.title) + '</a>'; var vl = (cfg.map && p.video.bvid) ? cfg.map['video:' + p.video.bvid] : ''; if (vl) { var mp4 = vl.replace(/_video.m4s$/, '.mp4'); var folder = vl.replace(/\/[^\/]*$/, ''); var bv = p.video.bvid; h += '<a class="loc" href="' + esc(mp4) + '" target="_blank" rel="noopener" title="合并后可直接播放">▶ 本地视频(合并后)</a>'; h += '<a class="mbtn" href="' + esc(folder + '/合并_' + bv + '.bat') + '" download title="只合并这个视频：下载后双击运行">⚙ 合并这个视频</a>'; } h += '</div>'; }
+            if (p.article) { var al = (cfg.offline && cfg.map && p.article.id) ? cfg.map['article:' + p.article.id] : ''; h += '<div class="art"><a class="artfull" href="' + esc(al || p.article.url) + '" target="_blank" rel="noopener">' + esc(p.article.title) + (al ? '（本地全文 ↗）' : '（在线全文 ↗）') + '</a></div>'; }
             if (p.medialist) h += '<div class="art"><a href="' + esc(p.medialist.url) + '" target="_blank" rel="noopener">收藏：' + esc(p.medialist.title) + '</a></div>';
             if (p.add) {
                 h += '<div class="add">' + (p.add.badge ? '<b>' + esc(p.add.badge) + '</b>' : '') + esc(p.add.title) + (p.add.desc ? '<small>' + esc(p.add.desc) + '</small>' : '') + (p.add.url ? '<a href="' + esc(p.add.url) + '" target="_blank">查看 ↗</a>' : '');
@@ -473,7 +473,7 @@
             '.imgs img{width:100%;height:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--soft);}', '.imgs.one img{aspect-ratio:auto;max-height:460px;object-fit:contain;}',
             '.video{display:flex;gap:10px;align-items:center;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:8px;text-decoration:none;color:var(--text);}',
             '.video img{width:120px;height:70px;object-fit:cover;border-radius:4px;background:var(--soft);}',
-            '.art{margin-top:8px;padding:10px;background:var(--soft);border-radius:8px;}', '.art a{color:var(--blue);text-decoration:none;}', '.art .artlink{color:var(--muted);font-size:12px;margin-left:6px;}',
+            '.art{margin-top:8px;padding:10px;background:var(--soft);border-radius:8px;}', '.art a{color:var(--blue);text-decoration:none;}', '.art .artfull{color:var(--blue);text-decoration:none;}', '.video .mbtn{margin-left:auto;border:1px solid var(--line);background:var(--soft);color:var(--muted);font-size:12px;padding:3px 8px;border-radius:6px;text-decoration:none;flex:0 0 auto;}', '.video .mbtn:hover{color:var(--pink);border-color:var(--pink);}', '.art .artlink{color:var(--muted);font-size:12px;margin-left:6px;}',
             '.add{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;}', '.add small{width:100%;color:var(--muted);}', '.add .addopts{width:100%;margin:4px 0 0;padding-left:18px;}', '.add .addopts li{font-size:13px;margin:2px 0;}', '.add .addopts b{color:var(--pink);}', '.add .addprize{width:100%;font-size:12px;color:var(--muted);}', '.add b{color:var(--pink);font-size:11px;}', '.add a{color:var(--blue);text-decoration:none;}',
             '.fwd{margin-top:8px;padding:10px 12px;background:var(--soft);border-radius:8px;}', '.fh{color:var(--pink);font-size:13px;margin-bottom:4px;}', '.ft{font-size:13px;color:var(--muted);line-height:1.6;}', '.fv{font-size:12px;margin-top:4px;}', '.fv a{color:var(--blue);text-decoration:none;}',
             '.stats{display:flex;gap:14px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);}', '.stats .go{margin-left:auto;color:var(--pink);text-decoration:none;}'
@@ -691,6 +691,13 @@
         });
         if (zJson) entries.push({ name: root + '/messages.json', data: new TextEncoder().encode(buildJSON()) });
         if (zCsv) entries.push({ name: root + '/messages.csv', data: new TextEncoder().encode(buildCSV()) });
+        list.forEach(function (item) {
+            var m = /^(video_files|short_videos)\/([^\/]+)_video\.m4s$/.exec(item.rel || '');
+            if (!m) return;
+            var folder = m[1], bv = m[2];
+            var one = ['@echo off', 'chcp 65001 >nul', 'cd /d "%~dp0"', 'where ffmpeg >nul 2>nul || (echo 未找到 ffmpeg，请先安装: winget install Gyan.FFmpeg ^& pause ^& exit /b 1)', 'ffmpeg -y -hide_banner -loglevel warning -i "' + bv + '_video.m4s" -i "' + bv + '_audio.m4s" -c copy "' + bv + '.mp4"', 'if errorlevel 1 (echo [失败] 请改用 合并视频.ps1 查看原因) else (echo [完成] ' + bv + '.mp4)', 'pause'].join(CRLF);
+            entries.push({ name: root + '/' + folder + '/合并_' + bv + '.bat', data: new TextEncoder().encode(one) });
+        });
         if (failed.length) entries.push({ name: root + '/media_links.txt', data: new TextEncoder().encode('以下 ' + failed.length + ' 个媒体未能自动下载：\n' + failed.join('\n') + '\n') });
         var hasVideo = entries.some(function (en) { return (en.name.indexOf('/video_files/') > -1 || en.name.indexOf('/short_videos/') > -1) && /_video\.m4s$/.test(en.name); });
         if (hasVideo) {

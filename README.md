@@ -66,7 +66,7 @@ MIT 协议，© 2026 UIM258。
 
 ### 视频合并
 
-B站视频为 DASH 分离流（`_video.m4s` + `_audio.m4s`）。安装 ffmpeg 后（Windows：`winget install Gyan.FFmpeg`），解压 ZIP 双击「合并视频.bat」会自动合并 `video_files/` 与 `short_videos/` 两个目录为 `<BV号>.mp4`；若 bat 闪退可运行「合并视频.ps1」。
+B站视频为 DASH 分离流（`_video.m4s` + `_audio.m4s`）。安装 ffmpeg 后（Windows：`winget install Gyan.FFmpeg`），解压 ZIP 双击「合并视频.bat」会自动合并 `video_files/` 与 `short_videos/` 两个目录为 `<BV号>.mp4`；若只想合并单个视频，双击对应目录下的 `合并_BV号.bat`，或在 HTML 视频卡片点「⚙ 合并这个视频」下载该视频的专属脚本。若 bat 闪退可运行「合并视频.ps1」。
 
 ## 说明
 
