@@ -2,7 +2,7 @@
 // @name         B站动态提取导出器
 // @name:zh-CN   B站动态提取导出器
 // @namespace    https://github.com/UIM258/bilibili-dynamic-tools
-// @version      1.1.0
+// @version      1.2.0
 // @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
 // @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
 // @author       UIM258
@@ -48,6 +48,13 @@
     function fmtNum(v) { var n = Number(v) || 0; return n >= 100000000 ? (n / 100000000).toFixed(1) + '亿' : (n >= 10000 ? (n / 10000).toFixed(1) + '万' : String(n)); }
     function esc(s) { return String(s === undefined || s === null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
     function plainText(h) { return String(h || ''); }
+    function stripHtmlTags(html) {
+        var tpl = document.createElement('template');
+        tpl.innerHTML = (html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|h[1-6])>/gi, '\n');
+        return (tpl.content.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    }
+    function safeTitle(s) { return String(s || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 60) || 'article'; }
+    function articleRel(p) { return 'articles/cv' + p.article.id + '_' + safeTitle(p.article.title) + '.html'; }
     function stripRich(rich, fallback) { if (!rich || !rich.length) return fallback || ''; var out = ''; rich.forEach(function (x) { if (!x) return; if (x.type === 'RICH_TEXT_NODE_TYPE_EMOJI') { out += '[' + (x.text || '表情') + ']'; } else { out += x.text || x.orig_text || ''; } }); return out || fallback || ''; }
 
     function apiUrl(offset) {
@@ -84,7 +91,7 @@
             var a = major.archive || {};
             var badge = (a.badge && a.badge.text) || '';
             var dur = parseDurationSec(a.duration_text);
-            if (badge.indexOf('小视频') > -1 || (dur > 0 && dur <= 60)) return '小视频';
+            if (badge.indexOf('小视频') > -1) return '小视频';   // 仅按标签识别，时长不作为依据
             return '视频';
         }
         if (t === 'DYNAMIC_TYPE_ARTICLE' || major.type === 'MAJOR_TYPE_ARTICLE') return '专栏';
@@ -264,6 +271,22 @@
                 if (!matchPost(p)) continue;
                 if (!S.name && p.author) S.name = p.author;
                 if (!S.avatar && p.face) S.avatar = p.face;
+                if (p.article && p.article.id) {
+                    try {
+                        setStatus('抓取专栏全文 cv' + p.article.id + ' …');
+                        var av = await fetchJson('https://api.bilibili.com/x/article/view?id=' + p.article.id);
+                        var ad = av && av.data;
+                        if (ad) {
+                            p.article.contentHtml = ad.content || '';
+                            p.article.textPlain = stripHtmlTags(ad.content || '').slice(0, 200000);
+                            p.article.images = ad.origin_image_urls || ad.image_urls || [];
+                            p.article.words = ad.words || 0;
+                            p.article.author = (ad.author && ad.author.name) || '';
+                            p.article.publishTime = ad.publish_time || ad.ctime || 0;
+                        }
+                    } catch (e) { console.warn('专栏全文抓取失败', p.article.id, e); }
+                    await sleep(150);
+                }
                 S.posts.push(p);
             }
             S.offset = page.offset; S.hasMore = !!page.hasMore;
@@ -288,7 +311,7 @@
     }
     function csvEscape(v) { var s = String(v === undefined || v === null ? '' : v); if (/[",\n\r]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"'; return s; }
     function buildCSV() {
-        var head = ['时间', '日期', '类型', '作者', '正文', '图片数', '视频标题', '视频BV号', '是否转发', '转发作者', '转发正文', '点赞', '评论', '转发数', '附加详情', '动态链接'];
+        var head = ['时间', '日期', '类型', '作者', '正文', '图片数', '视频标题', '视频BV号', '是否转发', '转发作者', '转发正文', '点赞', '评论', '转发数', '附加详情', '专栏字数', '动态链接'];
         var rows = [head.join(',')];
         S.posts.forEach(function (p) {
             rows.push([
@@ -299,6 +322,7 @@
                 csvEscape(p.forward ? p.forward.name : ''), csvEscape(p.forward ? p.forward.textPlain : ''),
                 p.likes, p.comments, p.reposts,
                 csvEscape(p.add ? JSON.stringify({ kind: p.add.kind, options: p.add.options || null, prizes: p.add.prizes || null, joinNum: p.add.joinNum != null ? p.add.joinNum : null, endTime: p.add.endTime || null }) : ''),
+                (p.article && p.article.words ? p.article.words : ''),
                 csvEscape(p.url)
             ].join(','));
         });
@@ -363,7 +387,7 @@
                 h += '</div>';
             }
             if (p.video) { h += '<div class="video"><img src="' + esc(lu(p.video.pic)) + '" alt=""/><a href="' + esc(p.video.url) + '" target="_blank" rel="noopener">' + esc(p.video.title) + '</a>'; var vl = (cfg.map && p.video.bvid) ? cfg.map['video:' + p.video.bvid] : ''; if (vl) h += '<a class="loc" href="' + esc(vl) + '" target="_blank" rel="noopener">▶ 本地文件</a>'; h += '</div>'; }
-            if (p.article) h += '<div class="art"><a href="' + esc(p.article.url) + '" target="_blank" rel="noopener">' + esc(p.article.title) + '</a></div>';
+            if (p.article) { var al = (cfg.offline && cfg.map && p.article.id) ? cfg.map['article:' + p.article.id] : ''; h += '<div class="art"><a href="' + esc(al || p.article.url) + '" target="_blank" rel="noopener">' + esc(p.article.title) + (al ? '（本地全文）' : '') + '</a></div>'; }
             if (p.medialist) h += '<div class="art"><a href="' + esc(p.medialist.url) + '" target="_blank" rel="noopener">收藏：' + esc(p.medialist.title) + '</a></div>';
             if (p.add) {
                 h += '<div class="add">' + (p.add.badge ? '<b>' + esc(p.add.badge) + '</b>' : '') + esc(p.add.title) + (p.add.desc ? '<small>' + esc(p.add.desc) + '</small>' : '') + (p.add.url ? '<a href="' + esc(p.add.url) + '" target="_blank">查看 ↗</a>' : '');
@@ -399,6 +423,17 @@
             '<header><div class="pf"><img class="pav" src="' + esc(av) + '" alt=""/><div><h1>' + esc(S.name || UID) + ' 的动态</h1><p>共 ' + chunk.length + ' 条 · 本次共导出 ' + S.posts.length + ' 条 · 导出于 ' + esc(fmtNow()) + '</p></div></div></header>\n' +
             nav(cfg.curVol, cfg.totalVol) + '\n' + cards + '\n' + nav(cfg.curVol, cfg.totalVol) + '\n' +
             '</div>\n</body>\n</html>';
+    }
+    function buildArticleHtml(p, map) {
+        var a = p.article || {};
+        var content = String(a.contentHtml || '').replace(/src="\/\//g, 'src="https://');
+        if (map) {
+            content = content.replace(/<img([^>]*?)src="([^"]+)"/gi, function (m, pre, src) {
+                var loc = map[src];
+                return '<img' + pre + 'src="' + (loc || src) + '"';
+            });
+        }
+        return '<!DOCTYPE html>\n<html lang="zh-CN"' + themeClass() + '>\n<head>\n<meta charset="utf-8"/>\n<meta name="viewport" content="width=device-width, initial-scale=1"/>\n<title>' + esc(a.title || '专栏') + '</title>\n<style>\n' + exportCss() + '\n.artwrap{max-width:760px;margin:0 auto;background:var(--panel);min-height:100vh;padding:28px 26px;box-sizing:border-box;}\n.artwrap h1{font-size:24px;margin:0 0 10px;}\n.artwrap .ameta{color:var(--muted);font-size:13px;margin-bottom:18px;}\n.artwrap .ameta a{color:var(--blue);text-decoration:none;}\n.content{font-size:16px;line-height:1.9;color:var(--text);word-break:break-word;}\n.content img{max-width:100%;border-radius:6px;}\n</style>\n</head>\n<body>\n<div class="artwrap">\n<h1>' + esc(a.title || '') + '</h1>\n<div class="ameta">' + esc(a.author || p.author || '') + ' · ' + esc(p.time || '') + (a.words ? (' · 字数 ' + a.words) : '') + ' · <a href="' + esc(a.url || '') + '" target="_blank" rel="noopener">原专栏 ↗</a></div>\n<div class="content">' + content + '</div>\n</div>\n</body>\n</html>';
     }
     function exportCss() {
         return [
@@ -574,7 +609,7 @@
         var zHtml = els.chkZHtml && els.chkZHtml.checked, zJson = els.chkZJson && els.chkZJson.checked, zCsv = els.chkZCsv && els.chkZCsv.checked;
         if (!zHtml && !zJson && !zCsv) { setStatus('请至少勾选一种打包格式。', true); return; }
         await loadAvatarData();
-        var seen = {}, list = [];
+        var seen = {}, list = [], artMap = {};
         function add(u, rel, alias) { if (!u || seen[u]) return; seen[u] = 1; list.push({ url: u, rel: rel, alias: alias || null }); }
         add(S.avatar, 'media/avatar' + extOf(S.avatar));
         S.posts.forEach(function (p) {
@@ -592,6 +627,13 @@
                         }
                     });
                 });
+            }
+        });
+        S.posts.forEach(function (p) {
+            if (p.article && p.article.contentHtml) {
+                var rel = articleRel(p);
+                artMap['article:' + p.article.id] = rel;
+                (p.article.images || []).forEach(function (u) { add(u, 'articles/images/' + safeName(u)); });
             }
         });
         if (els.chkVideoMedia && els.chkVideoMedia.checked) {
@@ -621,7 +663,15 @@
             catch (e) { failed.push(list[i].url); }
             await sleep(120);
         }
-        if (zHtml) buildPages(true, okMap).forEach(function (pg) { entries.push({ name: root + '/' + pg.name, data: new TextEncoder().encode(pg.html) }); });
+        var mapAll = {};
+        Object.keys(okMap).forEach(function (k) { mapAll[k] = okMap[k]; });
+        Object.keys(artMap).forEach(function (k) { mapAll[k] = artMap[k]; });
+        if (zHtml) buildPages(true, mapAll).forEach(function (pg) { entries.push({ name: root + '/' + pg.name, data: new TextEncoder().encode(pg.html) }); });
+        S.posts.forEach(function (p) {
+            if (p.article && p.article.contentHtml) {
+                entries.push({ name: root + '/' + artMap['article:' + p.article.id], data: new TextEncoder().encode(buildArticleHtml(p, okMap)) });
+            }
+        });
         if (zJson) entries.push({ name: root + '/messages.json', data: new TextEncoder().encode(buildJSON()) });
         if (zCsv) entries.push({ name: root + '/messages.csv', data: new TextEncoder().encode(buildCSV()) });
         if (failed.length) entries.push({ name: root + '/media_links.txt', data: new TextEncoder().encode('以下 ' + failed.length + ' 个媒体未能自动下载：\n' + failed.join('\n') + '\n') });
@@ -761,7 +811,7 @@
             '    <label class="chk" title="长文章（导出标题 / 封面 / cv 链接）"><input type="checkbox" id="bdx-k-article" checked/>专栏</label>' +
             '    <label class="chk" title="动态里附带的卡片：直播分享、游戏/评分/榜单等"><input type="checkbox" id="bdx-k-other" checked/>其他卡片</label>' +
             '  </div>' +
-            '  <div class="bdx-note">说明：收藏夹 = B站「合集/收藏夹」动态；小视频 = 按时长或标识判断；专栏导出标题/封面/链接（不抓正文全文）；其他卡片 = 直播/游戏/评分/榜单等非独立动态</div>' +
+            '  <div class="bdx-note">说明：收藏夹 = B站「合集/收藏夹」动态；小视频 = 按动态标签识别（仅标签含“小视频”）；专栏导出标题/封面/链接（不抓正文全文）；其他卡片 = 直播/游戏/评分/榜单等非独立动态</div>' +
             '  <div class="bdx-row">媒体：' +
             '    <label class="chk"><input type="checkbox" id="bdx-media-video"/>下载视频/音频文件</label>' +
             '    <label class="chk">清晰度 <select id="bdx-vq"><option value="auto">自动(最高)</option><option value="112">1080P+</option><option value="80">1080P</option><option value="64" selected>720P</option><option value="32">480P</option><option value="16">360P</option></select></label>' +
@@ -832,5 +882,5 @@
         keepAlive();
     }
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }
-    window.__bdx = { state: S, start: start, buildJSON: buildJSON, buildCSV: buildCSV, buildPages: buildPages, makeZip: makeZip, loadAvatar: loadAvatarData, resolveVideoFiles: resolveVideoFiles, resolveMusicFile: resolveMusicFile };
+    window.__bdx = { state: S, start: start, buildJSON: buildJSON, buildCSV: buildCSV, buildPages: buildPages, makeZip: makeZip, loadAvatar: loadAvatarData, resolveVideoFiles: resolveVideoFiles, resolveMusicFile: resolveMusicFile, fetchJson: fetchJson, buildArticleHtml: buildArticleHtml, articleRel: articleRel };
 })();
