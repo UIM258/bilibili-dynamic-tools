@@ -22,7 +22,7 @@ MIT 协议，© 2026 UIM258。
 - 打开对应 `.user.js` 的 Raw 地址安装，或从 GreasyFork 一键安装：
   - 分页浏览：https://greasyfork.org/zh-CN/scripts/595144
   - 提取导出：https://greasyfork.org/zh-CN/scripts/595147
-- **登录 B 站**后打开任意用户空间（`https://space.bilibili.com/<uid>/dynamic`），页面角落会出现悬浮按钮
+- **登录 B 站**后打开任意用户空间（`https://space.bilibili.com/<uid>/dynamic`），页面角落会出现悬浮按钮\n- 悬浮按钮支持拖动：按住拖到任意位置，位置会自动记住
 - 部分 UP 主动态需登录后才可见，脚本需登录态才能正常工作
 
 ## 脚本一：分页浏览

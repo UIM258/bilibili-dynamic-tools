@@ -2,7 +2,7 @@
 // @name         B站动态提取导出器
 // @name:zh-CN   B站动态提取导出器
 // @namespace    https://github.com/UIM258/bilibili-dynamic-tools
-// @version      1.6.0
+// @version      1.6.1
 // @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、本地视频直达、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
 // @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、本地视频直达、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
 // @author       UIM258
@@ -841,11 +841,52 @@
         #bdx-overlay.bdx-dark #bdx-close { color: #7a7a80; }
     `);
 
+    // 悬浮按钮可拖动（位置记忆）
+    function enableDrag(btn, key) {
+        if (!btn || btn.getAttribute('data-drag') === '1') return;
+        btn.setAttribute('data-drag', '1');
+        var saved = null;
+        try { saved = JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) {}
+        if (saved && typeof saved.x === 'number' && typeof saved.y === 'number') {
+            btn.style.left = saved.x + 'px'; btn.style.top = saved.y + 'px';
+            btn.style.right = 'auto'; btn.style.bottom = 'auto';
+        }
+        var moved = false;
+        btn.style.cursor = 'grab';
+        btn.addEventListener('mousedown', function (e) {
+            if (e.button !== 0) return;
+            var r = btn.getBoundingClientRect();
+            var ox = e.clientX - r.left, oy = e.clientY - r.top;
+            btn.style.right = 'auto'; btn.style.bottom = 'auto';
+            btn.style.left = r.left + 'px'; btn.style.top = r.top + 'px';
+            btn.style.cursor = 'grabbing';
+            moved = false;
+            function mv(ev) {
+                moved = true;
+                var x = Math.max(4, Math.min(window.innerWidth - btn.offsetWidth - 4, ev.clientX - ox));
+                var y = Math.max(4, Math.min(window.innerHeight - btn.offsetHeight - 4, ev.clientY - oy));
+                btn.style.left = x + 'px'; btn.style.top = y + 'px';
+                ev.preventDefault();
+            }
+            function up() {
+                document.removeEventListener('mousemove', mv);
+                document.removeEventListener('mouseup', up);
+                btn.style.cursor = 'grab';
+                try { localStorage.setItem(key, JSON.stringify({ x: parseInt(btn.style.left, 10), y: parseInt(btn.style.top, 10) })); } catch (err) {}
+                setTimeout(function () { moved = false; }, 0);
+            }
+            document.addEventListener('mousemove', mv);
+            document.addEventListener('mouseup', up);
+        });
+        btn.addEventListener('click', function (e) { if (moved) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+    }
+
     function buildUI() {
         var launcher = document.createElement('button');
         launcher.id = 'bdx-launcher'; launcher.textContent = '导出动态';
         launcher.addEventListener('click', function () { els.overlay.classList.add('bdx-open'); });
         document.body.appendChild(launcher);
+        enableDrag(launcher, 'bdx_btn_pos');
 
         var ov = document.createElement('div');
         ov.id = 'bdx-overlay';
@@ -929,6 +970,7 @@
                 var b = document.createElement('button'); b.id = 'bdx-launcher'; b.textContent = '导出动态';
                 b.addEventListener('click', function () { els.overlay.classList.add('bdx-open'); });
                 document.body.appendChild(b);
+                enableDrag(b, 'bdx_btn_pos');
             }
         }, 3000);
     }
