@@ -2,7 +2,7 @@
 // @name         B站动态提取导出器
 // @name:zh-CN   B站动态提取导出器
 // @namespace    https://github.com/UIM258/bilibili-dynamic-tools
-// @version      1.0.2
+// @version      1.0.3
 // @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/视频/转发/文字/专栏/直播卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP（图片/表情/视频音频可选），含投票抽奖明细，支持分卷、进度与暂停续传
 // @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/视频/转发/文字/专栏/直播卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP（图片/表情/视频音频可选），含投票抽奖明细，支持分卷、进度与暂停续传
 // @author       UIM258
@@ -596,27 +596,81 @@
             var CRLF = String.fromCharCode(13, 10);
             var bat = [
                 '@echo off',
+                'setlocal',
                 'chcp 65001 >nul',
                 'cd /d "%~dp0"',
+                'echo ============================================',
+                'echo   B站视频合并工具',
+                'echo ============================================',
+                'echo 当前目录: %CD%',
+                'echo.',
                 'where ffmpeg >nul 2>nul',
-                'if errorlevel 1 (echo [错误] 未找到 ffmpeg，请先安装 ffmpeg 并加入 PATH & pause & exit /b)',
+                'if errorlevel 1 (',
+                '  echo [错误] 未找到 ffmpeg。',
+                '  echo 请先安装: winget install Gyan.FFmpeg',
+                '  echo 安装后请重新打开窗口再运行本脚本。',
+                '  echo.',
+                '  pause',
+                '  exit /b 1',
+                ')',
+                'if not exist "video_files" (',
+                '  echo [错误] 当前目录下没有 video_files 文件夹。',
+                '  echo 请先完整解压 ZIP，再在此文件夹内运行本脚本。',
+                '  echo.',
+                '  pause',
+                '  exit /b 1',
+                ')',
+                'set count=0',
                 'for %%f in (video_files\*_video.m4s) do (',
-                '  setlocal enabledelayedexpansion',
                 '  set "base=%%~nf"',
+                '  setlocal enabledelayedexpansion',
                 '  set "name=!base:_video=!"',
                 '  if exist "video_files\!name!_audio.m4s" (',
-                '    echo 正在合并 !name! ...',
-                '    ffmpeg -y -i "video_files\!name!_video.m4s" -i "video_files\!name!_audio.m4s" -c copy "video_files\!name!.mp4"',
+                '    echo [合并] !name!',
+                '    ffmpeg -y -hide_banner -loglevel warning -i "video_files\!name!_video.m4s" -i "video_files\!name!_audio.m4s" -c copy "video_files\!name!.mp4"',
+                '    if errorlevel 1 (echo [失败] !name!) else (echo [完成] video_files\!name!.mp4)',
                 '  ) else (',
-                '    ffmpeg -y -i "video_files\!name!_video.m4s" -c copy "video_files\!name!_video_only.mp4"',
+                '    echo [仅视频] !name! 没有对应音频，导出无声视频',
+                '    ffmpeg -y -hide_banner -loglevel warning -i "video_files\!name!_video.m4s" -c copy "video_files\!name!_video_only.mp4"',
                 '  )',
                 '  endlocal',
+                '  set /a count+=1',
                 ')',
-                'echo 完成：mp4 已生成在 video_files 目录。',
+                'echo.',
+                'echo 共处理 %count% 个视频。输出在 video_files 目录。',
+                'echo.',
                 'pause'
             ].join(CRLF);
-            var note = ['B站视频为 DASH 分离流（视频/音频各一个 .m4s），需要合并才能得到带声音的 mp4。', '', '用法：', '1. 安装 ffmpeg（Windows 可用 winget install Gyan.FFmpeg，或到 ffmpeg.org 下载并加入 PATH）', '2. 双击本目录下的「合并视频.bat」', '3. 合并结果：video_files\<BV号>.mp4', '', '未安装 ffmpeg 时，两个 m4s 文件本身也能用支持 DASH 分离流的播放器分别播放（无声音/无画面其一）。'].join(CRLF);
+            var ps1 = [
+                "$ErrorActionPreference = 'Stop'",
+                "Set-Location -LiteralPath $PSScriptRoot",
+                "Write-Host '=== B站视频合并工具 ==='",
+                "if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {",
+                "  Write-Host '[错误] 未找到 ffmpeg，请先安装：winget install Gyan.FFmpeg' -ForegroundColor Red",
+                "  Read-Host '按回车退出'",
+                "  exit 1",
+                "}",
+                "\$dir = Join-Path \$PSScriptRoot 'video_files'",
+                "if (-not (Test-Path -LiteralPath \$dir)) { Write-Host '[错误] 没有 video_files 文件夹，请先完整解压 ZIP' -ForegroundColor Red; Read-Host '按回车退出'; exit 1 }",
+                "\$vids = Get-ChildItem -LiteralPath \$dir -Filter '*_video.m4s' -ErrorAction SilentlyContinue",
+                "if (-not \$vids) { Write-Host '[提示] video_files 下没有 *_video.m4s（导出时未勾选“下载视频/音频文件”？）' -ForegroundColor Yellow; Read-Host '按回车退出'; exit 0 }",
+                "foreach (\$v in \$vids) {",
+                "  \$name = \$v.BaseName -replace '_video$',''",
+                "  \$audio = Join-Path \$dir (\$name + '_audio.m4s')",
+                "  if (Test-Path -LiteralPath \$audio) {",
+                "    Write-Host ('[合并] ' + \$name)",
+                "    ffmpeg -y -hide_banner -loglevel warning -i \$v.FullName -i \$audio -c copy (Join-Path \$dir (\$name + '.mp4'))",
+                "  } else {",
+                "    Write-Host ('[仅视频] ' + \$name + ' 无音频')",
+                "    ffmpeg -y -hide_banner -loglevel warning -i \$v.FullName -c copy (Join-Path \$dir (\$name + '_video_only.mp4'))",
+                "  }",
+                "}",
+                "Write-Host '全部完成，输出在 video_files 目录。' -ForegroundColor Green",
+                "Read-Host '按回车退出'"
+            ].join(CRLF);
+            var note = ['B站视频为 DASH 分离流（视频/音频各一个 .m4s），需要合并才能得到带声音的 mp4。', '', '用法：', '1. 先把 ZIP 完整解压到一个文件夹', '2. 安装 ffmpeg：winget install Gyan.FFmpeg（安装后需重开窗口）', '3. 双击「合并视频.bat」；若 bat 闪退，右键用 PowerShell 运行「合并视频.ps1」', '4. 合并结果：video_files\\<BV号>.mp4', '', '若提示“没有 *_video.m4s”：说明导出时未勾选“下载视频/音频文件”，或媒体下载失败（见 media_links.txt）。'].join(CRLF);
             entries.push({ name: root + '/合并视频.bat', data: new TextEncoder().encode(bat) });
+            entries.push({ name: root + '/合并视频.ps1', data: new TextEncoder().encode(ps1) });
             entries.push({ name: root + '/合并视频-说明.txt', data: new TextEncoder().encode(note) });
         }
         downloadBlob(root + '.zip', makeZip(entries));
