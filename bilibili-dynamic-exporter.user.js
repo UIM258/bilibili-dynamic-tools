@@ -2,7 +2,7 @@
 // @name         B站动态提取导出器
 // @name:zh-CN   B站动态提取导出器
 // @namespace    https://github.com/UIM258/bilibili-dynamic-tools
-// @version      1.5.0
+// @version      1.6.0
 // @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、本地视频直达、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
 // @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、本地视频直达、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
 // @author       UIM258
@@ -402,7 +402,24 @@
                 });
                 h += '</div>';
             }
-            if (p.video) { h += '<div class="video"><img src="' + esc(lu(p.video.pic)) + '" alt=""/><a href="' + esc(p.video.url) + '" target="_blank" rel="noopener">' + esc(p.video.title) + '</a>'; var vl = (cfg.map && p.video.bvid) ? cfg.map['video:' + p.video.bvid] : ''; if (vl) { var mp4 = vl.replace(/_video.m4s$/, '.mp4'); var folder = vl.replace(/\/[^\/]*$/, ''); var bv = p.video.bvid; h += '<a class="loc" href="' + esc(mp4) + '" target="_blank" rel="noopener" title="合并后可直接播放">▶ 本地视频(合并后)</a>'; h += '<a class="mbtn" href="' + esc(folder + '/合并_' + bv + '.bat') + '" download title="只合并这个视频：下载后双击运行">⚙ 合并这个视频</a>'; } h += '</div>'; }
+            if (p.video) {
+                h += '<div class="video"><img src="' + esc(lu(p.video.pic)) + '" alt=""/><a href="' + esc(p.video.url) + '" target="_blank" rel="noopener">' + esc(p.video.title) + '</a>';
+                var vl = (cfg.map && p.video.bvid) ? cfg.map['video:' + p.video.bvid] : '';
+                var vbv = p.video.bvid;
+                if (vl) {
+                    if (!/_video\.m4s$/.test(vl)) {
+                        h += '<a class="loc" href="' + esc(vl) + '" target="_blank" rel="noopener" title="含音轨单文件，可直接播放">▶ 本地视频（可直接播放）</a>';
+                    } else {
+                        h += '<a class="loc" href="' + esc(vl.replace(/_video\.m4s$/, '.mp4')) + '" target="_blank" rel="noopener" title="先合并后可播放">▶ 本地视频(合并后)</a>';
+                    }
+                }
+                h += '</div>';
+                if (vl && /_video\.m4s$/.test(vl)) {
+                    var folder2 = vl.replace(/\/[^\/]*$/, '');
+                    var cmd = 'ffmpeg -y -i "' + folder2 + '\\' + vbv + '_video.m4s" -i "' + folder2 + '\\' + vbv + '_audio.m4s" -c copy "' + folder2 + '\\' + vbv + '.mp4"';
+                    h += '<div class="mcmd" title="复制到 CMD 执行">' + esc(cmd) + '</div><div class="mtip">分片视频：复制上面命令到 CMD 执行；或在解压目录里双击 ' + esc(folder2) + '\\合并_' + esc(vbv) + '.bat（浏览器点 bat 只会显示文本）</div>';
+                }
+            }
             if (p.article) { var al = (cfg.offline && cfg.map && p.article.id) ? cfg.map['article:' + p.article.id] : ''; h += '<div class="art"><a class="artfull" href="' + esc(al || p.article.url) + '" target="_blank" rel="noopener">' + esc(p.article.title) + (al ? '（本地全文 ↗）' : '（在线全文 ↗）') + '</a></div>'; }
             if (p.medialist) h += '<div class="art"><a href="' + esc(p.medialist.url) + '" target="_blank" rel="noopener">收藏：' + esc(p.medialist.title) + '</a></div>';
             if (p.add) {
@@ -473,7 +490,7 @@
             '.imgs img{width:100%;height:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--soft);}', '.imgs.one img{aspect-ratio:auto;max-height:460px;object-fit:contain;}',
             '.video{display:flex;gap:10px;align-items:center;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:8px;text-decoration:none;color:var(--text);}',
             '.video img{width:120px;height:70px;object-fit:cover;border-radius:4px;background:var(--soft);}',
-            '.art{margin-top:8px;padding:10px;background:var(--soft);border-radius:8px;}', '.art a{color:var(--blue);text-decoration:none;}', '.art .artfull{color:var(--blue);text-decoration:none;}', '.video .mbtn{margin-left:auto;border:1px solid var(--line);background:var(--soft);color:var(--muted);font-size:12px;padding:3px 8px;border-radius:6px;text-decoration:none;flex:0 0 auto;}', '.video .mbtn:hover{color:var(--pink);border-color:var(--pink);}', '.art .artlink{color:var(--muted);font-size:12px;margin-left:6px;}',
+            '.art{margin-top:8px;padding:10px;background:var(--soft);border-radius:8px;}', '.art a{color:var(--blue);text-decoration:none;}', '.art .artfull{color:var(--blue);text-decoration:none;}', '.mcmd{margin:6px 0 0;padding:8px 10px;background:var(--soft);border:1px dashed var(--line);border-radius:6px;font:12px/1.6 Consolas,Menlo,monospace;color:var(--text);word-break:break-all;user-select:all;}', '.mtip{margin-top:4px;font-size:11px;color:var(--muted);}', '.art .artlink{color:var(--muted);font-size:12px;margin-left:6px;}',
             '.add{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;}', '.add small{width:100%;color:var(--muted);}', '.add .addopts{width:100%;margin:4px 0 0;padding-left:18px;}', '.add .addopts li{font-size:13px;margin:2px 0;}', '.add .addopts b{color:var(--pink);}', '.add .addprize{width:100%;font-size:12px;color:var(--muted);}', '.add b{color:var(--pink);font-size:11px;}', '.add a{color:var(--blue);text-decoration:none;}',
             '.fwd{margin-top:8px;padding:10px 12px;background:var(--soft);border-radius:8px;}', '.fh{color:var(--pink);font-size:13px;margin-bottom:4px;}', '.ft{font-size:13px;color:var(--muted);line-height:1.6;}', '.fv{font-size:12px;margin-top:4px;}', '.fv a{color:var(--blue);text-decoration:none;}',
             '.stats{display:flex;gap:14px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);}', '.stats .go{margin-left:auto;color:var(--pink);text-decoration:none;}'
@@ -561,7 +578,7 @@
         });
     }
     // 解析一个视频的可下载文件（DASH: 视频+音频分离；durl: 合并文件）
-    async function resolveVideoFiles(bvid, qn, isShort) {
+    async function resolveVideoFiles(bvid, qn, isShort, mode) {
         var out = [];
         if (!bvid) return out;
         var folder = isShort ? 'short_videos/' : 'video_files/';
@@ -569,6 +586,14 @@
             var v = await fetchJson('https://api.bilibili.com/x/web-interface/view?bvid=' + bvid);
             var cid = v && v.data && v.data.cid; if (!cid) return out;
             var want = (qn === 'auto' || !qn) ? 120 : Number(qn);
+            if (mode === 'single') {
+                var sj = await fetchJson('https://api.bilibili.com/x/player/playurl?bvid=' + bvid + '&cid=' + cid + '&fnval=0&qn=' + want + '&otype=json');
+                var sd = sj && sj.data; if (!sd || !sd.durl || !sd.durl.length) return out;
+                var fmt = String(sd.format || '');
+                var ext = (fmt.indexOf('flv') > -1) ? '.flv' : '.mp4';
+                out.push({ url: sd.durl[0].url, rel: folder + bvid + ext, qn: sd.quality, single: true });
+                return out;
+            }
             var pj = await fetchJson('https://api.bilibili.com/x/player/playurl?bvid=' + bvid + '&cid=' + cid + '&fnval=16&fourk=1&qn=' + want + '&otype=json');
             var d = pj && pj.data; if (!d) return out;
             if (d.durl && d.durl.length) {
@@ -660,8 +685,9 @@
                 if (vp.video && vp.video.bvid && !seenV[vp.video.bvid]) {
                     seenV[vp.video.bvid] = 1;
                     var qnVal = (els.vq && els.vq.value) || 'auto';
-                    setStatus('解析视频地址 ' + vp.video.bvid + '（清晰度 ' + qnVal + '）…');
-                    var vf = await resolveVideoFiles(vp.video.bvid, qnVal, vp.typeLabel === '小视频');
+                    var modeVal = (els.vmode && els.vmode.value) || 'single';
+                    setStatus('解析视频地址 ' + vp.video.bvid + '（' + (modeVal === 'single' ? '单文件' : '分片') + ' / 清晰度 ' + qnVal + '）…');
+                    var vf = await resolveVideoFiles(vp.video.bvid, qnVal, vp.typeLabel === '小视频', modeVal);
                     vf.forEach(function (x, i) { add(x.url, x.rel, i === 0 ? ('video:' + vp.video.bvid) : null); });
                     await sleep(200);
                 }
@@ -843,6 +869,7 @@
             '  <div class="bdx-note">说明：收藏夹 = B站「合集/收藏夹」动态；小视频 = 仅按标签含“小视频”识别；专栏 = 抓全文并生成本地 HTML（含正文图片）；其他卡片 = 直播/游戏/评分/榜单等非独立动态</div>' +
             '  <div class="bdx-row">媒体：' +
             '    <label class="chk"><input type="checkbox" id="bdx-media-video"/>下载视频/音频文件</label>' +
+            '    <label class="chk">文件 <select id="bdx-vmode" title="单文件=含音轨、免合并、浏览器可直接播放；分片=清晰度更高但需 ffmpeg 合并"><option value="single" selected>单文件(免合并)</option><option value="dash">分片(高清晰度)</option></select></label>' +
             '    <label class="chk">清晰度 <select id="bdx-vq"><option value="auto">自动(最高)</option><option value="112">1080P+</option><option value="80">1080P</option><option value="64" selected>720P</option><option value="32">480P</option><option value="16">360P</option></select></label>' +
             '    <label class="chk"><input type="checkbox" id="bdx-media-emoticon" checked/>打包表情图片</label>' +
             '  </div>' +
@@ -874,7 +901,7 @@
         els.progress = ov.querySelector('#bdx-progress'); els.status = ov.querySelector('#bdx-status');
         els.chkZHtml = ov.querySelector('#bdx-z-html'); els.chkZJson = ov.querySelector('#bdx-z-json'); els.chkZCsv = ov.querySelector('#bdx-z-csv');
         els.chkSplit = ov.querySelector('#bdx-split'); els.splitN = ov.querySelector('#bdx-split-n');
-        els.chkVideoMedia = ov.querySelector('#bdx-media-video'); els.chkEmoticon = ov.querySelector('#bdx-media-emoticon'); els.vq = ov.querySelector('#bdx-vq');
+        els.chkVideoMedia = ov.querySelector('#bdx-media-video'); els.chkEmoticon = ov.querySelector('#bdx-media-emoticon'); els.vq = ov.querySelector('#bdx-vq'); els.vmode = ov.querySelector('#bdx-vmode');
         els.close = ov.querySelector('#bdx-close');
         els.start.addEventListener('click', start);
         els.pause.addEventListener('click', pause);
