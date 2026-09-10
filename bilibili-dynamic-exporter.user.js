@@ -2,7 +2,7 @@
 // @name         B站动态提取导出器
 // @name:zh-CN   B站动态提取导出器
 // @namespace    https://github.com/UIM258/bilibili-dynamic-tools
-// @version      1.0.1
+// @version      1.0.2
 // @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/视频/转发/文字/专栏/直播卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP（图片/表情/视频音频可选），含投票抽奖明细，支持分卷、进度与暂停续传
 // @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/视频/转发/文字/专栏/直播卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP（图片/表情/视频音频可选），含投票抽奖明细，支持分卷、进度与暂停续传
 // @author       UIM258
@@ -431,11 +431,21 @@
         }
         a.click();
     }
+    // 注意：下载锚点绝对不要插入 DOM —— B站 SPA 会在 capture 阶段拦截 document 上的点击，
+    // 把 blob: 下载地址当作站内链接接管，导致跳到畸形 URL。detached 元素不会进入事件传播链。
     function download(name, content, mime) {
-        try { var blob = new Blob([content], { type: mime + ';charset=utf-8' }); var u = URL.createObjectURL(blob); var a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); fireDownload(a); setTimeout(function () { URL.revokeObjectURL(u); a.remove(); }, 5000); }
+        try { var blob = new Blob([content], { type: mime + ';charset=utf-8' }); downloadBlob(name, blob); }
         catch (e) { alert('下载失败：' + e.message); }
     }
-    function downloadBlob(name, blob) { try { var u = URL.createObjectURL(blob); var a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); fireDownload(a); setTimeout(function () { URL.revokeObjectURL(u); a.remove(); }, 6000); } catch (e) { alert('下载失败：' + e.message); } }
+    function downloadBlob(name, blob) {
+        try {
+            var u = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = u; a.download = name; a.rel = 'noopener';
+            a.click();
+            setTimeout(function () { URL.revokeObjectURL(u); }, 10000);
+        } catch (e) { alert('下载失败：' + e.message); }
+    }
     // 极简 ZIP (store)
     var CRC_T = (function () { var t = new Uint32Array(256); for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; } return t; })();
     function crc32(u8) { var c = 0xFFFFFFFF; for (var i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
