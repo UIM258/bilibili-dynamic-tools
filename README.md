@@ -14,7 +14,7 @@ MIT 协议，© 2026 UIM258
 1. 浏览器安装 [Tampermonkey](https://www.tampermonkey.net/)
 2. 打开对应 `.user.js` 的 Raw 地址安装，或 GreasyFork 一键安装：
    - 分页浏览：https://greasyfork.org/zh-CN/scripts/595144
-   - 提取导出：（GreasyFork 页面发布后补充）
+   - 提取导出：https://greasyfork.org/zh-CN/scripts/595147
 3. **登录 B 站**后打开目标空间：`https://space.bilibili.com/<用户ID>/dynamic`
 4. 右下角粉色「动态分页」/ 左下角蓝色「导出动态」
 
