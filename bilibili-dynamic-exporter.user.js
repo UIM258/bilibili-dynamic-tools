@@ -2,9 +2,9 @@
 // @name         B站动态提取导出器
 // @name:zh-CN   B站动态提取导出器
 // @namespace    https://github.com/UIM258/bilibili-dynamic-tools
-// @version      1.2.0
-// @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
-// @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
+// @version      1.3.0
+// @description  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、本地视频直达、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
+// @description:zh-CN  B站用户空间动态提取导出：按日期范围与内容类型（图文/收藏夹/视频/小视频/转发/纯文字/专栏/卡片）筛选，导出 JSON/CSV/HTML 或 TG式ZIP；视频可选清晰度(360P~1080P+)、本地视频直达、图片/表情/音频可选，含投票抽奖明细，支持分卷与进度续传
 // @author       UIM258
 // @license      MIT
 // @icon         https://www.bilibili.com/favicon.ico
@@ -358,7 +358,7 @@
             if (!x) return;
             if (x.type === 'RICH_TEXT_NODE_TYPE_EMOJI') {
                 var e = x.emoji || {};
-                var u = e.webp_url || e.gif_url || e.icon_url || x.icon_url || '';
+                var u = e.gif_url || e.webp_url || e.icon_url || x.icon_url || '';
                 var src = (map && u && map[u]) ? map[u] : u;
                 h += src ? '<img class="emot" src="' + esc(src) + '" alt="' + esc(x.text || '') + '"/>' : esc(x.text || '');
             } else h += esc(x.text || x.orig_text || '');
@@ -386,7 +386,7 @@
                 });
                 h += '</div>';
             }
-            if (p.video) { h += '<div class="video"><img src="' + esc(lu(p.video.pic)) + '" alt=""/><a href="' + esc(p.video.url) + '" target="_blank" rel="noopener">' + esc(p.video.title) + '</a>'; var vl = (cfg.map && p.video.bvid) ? cfg.map['video:' + p.video.bvid] : ''; if (vl) h += '<a class="loc" href="' + esc(vl) + '" target="_blank" rel="noopener">▶ 本地文件</a>'; h += '</div>'; }
+            if (p.video) { h += '<div class="video"><img src="' + esc(lu(p.video.pic)) + '" alt=""/><a href="' + esc(p.video.url) + '" target="_blank" rel="noopener">' + esc(p.video.title) + '</a>'; var vl = (cfg.map && p.video.bvid) ? cfg.map['video:' + p.video.bvid] : ''; if (vl) { var mp4 = vl.replace(/_video\.m4s$/, '.mp4'); h += '<a class="loc" href="' + esc(mp4) + '" target="_blank" rel="noopener" title="运行合并视频.bat 后可直接播放">▶ 本地视频(合并后)</a>'; } h += '</div>'; }
             if (p.article) { var al = (cfg.offline && cfg.map && p.article.id) ? cfg.map['article:' + p.article.id] : ''; h += '<div class="art"><a href="' + esc(al || p.article.url) + '" target="_blank" rel="noopener">' + esc(p.article.title) + (al ? '（本地全文）' : '') + '</a></div>'; }
             if (p.medialist) h += '<div class="art"><a href="' + esc(p.medialist.url) + '" target="_blank" rel="noopener">收藏：' + esc(p.medialist.title) + '</a></div>';
             if (p.add) {
@@ -574,7 +574,8 @@
                 var as = (d.dash.audio || []).filter(function (x) { return x.baseUrl || x.base_url; });
                 var aud = as.length ? as.reduce(function (a, b) { return (Number(b.bandwidth) > Number(a.bandwidth)) ? b : a; }) : null;
                 if (chosen) out.push({ url: chosen.baseUrl || chosen.base_url, rel: folder + bvid + '_' + (chosen.id || want) + '_video.m4s', qn: chosen.id });
-                if (aud) out.push({ url: aud.baseUrl || aud.base_url, rel: folder + bvid + '_audio.m4s', qn: chosen ? chosen.id : want });
+                var qid = chosen ? (chosen.id || want) : want;
+                if (aud) out.push({ url: aud.baseUrl || aud.base_url, rel: folder + bvid + '_' + qid + '_audio.m4s', qn: qid });
             }
         } catch (e) { console.warn('视频地址解析失败', bvid, e); }
         return out;
@@ -622,7 +623,7 @@
                 [p.rich, p.forward && p.forward.rich].forEach(function (rich) {
                     (rich || []).forEach(function (n) {
                         if (n && n.type === 'RICH_TEXT_NODE_TYPE_EMOJI') {
-                            var e = n.emoji || {}; var u = e.webp_url || e.gif_url || e.icon_url || n.icon_url || '';
+                            var e = n.emoji || {}; var u = e.gif_url || e.webp_url || e.icon_url || n.icon_url || '';
                             if (u) add(u, 'emoticons/' + safeOf(u));
                         }
                     });
@@ -633,7 +634,7 @@
             if (p.article && p.article.contentHtml) {
                 var rel = articleRel(p);
                 artMap['article:' + p.article.id] = rel;
-                (p.article.images || []).forEach(function (u) { add(u, 'articles/images/' + safeName(u)); });
+                (p.article.images || []).forEach(function (u) { add(u, 'articles/images/' + safeOf(u)); });
             }
         });
         if (els.chkVideoMedia && els.chkVideoMedia.checked) {
@@ -698,9 +699,12 @@
                 '    for %%f in ("%%d' + BS + '*_video.m4s") do (',
                 '      set "base=%%~nf"',
                 '      set "name=!base:_video=!"',
-                '      if exist "%%d' + BS + '!name!_audio.m4s" (',
+                '      set "bvid=!name:~0,12!"',
+                '      set "audi=%%d' + BS + '!name!_audio.m4s"',
+                '      if not exist "!audi!" set "audi=%%d' + BS + '!bvid!_audio.m4s"',
+                '      if exist "!audi!" (',
                 '        echo [合并] %%d' + BS + '!name!',
-                '        ffmpeg -y -hide_banner -loglevel warning -i "%%d' + BS + '!name!_video.m4s" -i "%%d' + BS + '!name!_audio.m4s" -c copy "%%d' + BS + '!name!.mp4"',
+                '        ffmpeg -y -hide_banner -loglevel warning -i "%%d' + BS + '!name!_video.m4s" -i "!audi!" -c copy "%%d' + BS + '!name!.mp4"',
                 '      ) else (',
                 '        echo [仅视频] %%d' + BS + '!name!',
                 '        ffmpeg -y -hide_banner -loglevel warning -i "%%d' + BS + '!name!_video.m4s" -c copy "%%d' + BS + '!name!_video_only.mp4"',
@@ -728,7 +732,9 @@
                 "  $vids = Get-ChildItem -LiteralPath $d -Filter '*_video.m4s' -ErrorAction SilentlyContinue",
                 '  foreach ($v in $vids) {',
                 "    $name = $v.BaseName -replace '_video$',''",
+                "    $bvid = $name.Substring(0, [Math]::Min(12, $name.Length))",
                 "    $audio = Join-Path $d ($name + '_audio.m4s')",
+                "    if (-not (Test-Path -LiteralPath $audio)) { $audio = Join-Path $d ($bvid + '_audio.m4s') }",
                 '    if (Test-Path -LiteralPath $audio) {',
                 "      Write-Host ('[合并] ' + $v.Directory.Name + ' / ' + $name)",
                 "      ffmpeg -y -hide_banner -loglevel warning -i $v.FullName -i $audio -c copy (Join-Path $d ($name + '.mp4'))",
@@ -805,13 +811,13 @@
             '    <label class="chk" title="带图片的动态 / 相册（含 opus 图片动态）"><input type="checkbox" id="bdx-k-pic" checked/>图文</label>' +
             '    <label class="chk" title="B站收藏夹 / 合集动态（MAJOR_TYPE_MEDIALIST）"><input type="checkbox" id="bdx-k-fav" checked/>收藏夹</label>' +
             '    <label class="chk" title="投稿视频（BV）"><input type="checkbox" id="bdx-k-video" checked/>视频</label>' +
-            '    <label class="chk" title="竖屏短视频（按标识或时长≤60秒识别）"><input type="checkbox" id="bdx-k-short" checked/>小视频</label>' +
+            '    <label class="chk" title="竖屏短视频：仅按动态标签识别（标签含“小视频”）"><input type="checkbox" id="bdx-k-short" checked/>小视频</label>' +
             '    <label class="chk" title="转发的动态"><input type="checkbox" id="bdx-k-rt" checked/>转发</label>' +
             '    <label class="chk" title="没有媒体的纯文字动态"><input type="checkbox" id="bdx-k-word" checked/>纯文字</label>' +
-            '    <label class="chk" title="长文章（导出标题 / 封面 / cv 链接）"><input type="checkbox" id="bdx-k-article" checked/>专栏</label>' +
+            '    <label class="chk" title="长文章：抓取全文并保存为本地 articles/*.html（含正文图片）"><input type="checkbox" id="bdx-k-article" checked/>专栏</label>' +
             '    <label class="chk" title="动态里附带的卡片：直播分享、游戏/评分/榜单等"><input type="checkbox" id="bdx-k-other" checked/>其他卡片</label>' +
             '  </div>' +
-            '  <div class="bdx-note">说明：收藏夹 = B站「合集/收藏夹」动态；小视频 = 按动态标签识别（仅标签含“小视频”）；专栏导出标题/封面/链接（不抓正文全文）；其他卡片 = 直播/游戏/评分/榜单等非独立动态</div>' +
+            '  <div class="bdx-note">说明：收藏夹 = B站「合集/收藏夹」动态；小视频 = 仅按标签含“小视频”识别；专栏 = 抓全文并生成本地 HTML（含正文图片）；其他卡片 = 直播/游戏/评分/榜单等非独立动态</div>' +
             '  <div class="bdx-row">媒体：' +
             '    <label class="chk"><input type="checkbox" id="bdx-media-video"/>下载视频/音频文件</label>' +
             '    <label class="chk">清晰度 <select id="bdx-vq"><option value="auto">自动(最高)</option><option value="112">1080P+</option><option value="80">1080P</option><option value="64" selected>720P</option><option value="32">480P</option><option value="16">360P</option></select></label>' +
@@ -882,5 +888,5 @@
         keepAlive();
     }
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }
-    window.__bdx = { state: S, start: start, buildJSON: buildJSON, buildCSV: buildCSV, buildPages: buildPages, makeZip: makeZip, loadAvatar: loadAvatarData, resolveVideoFiles: resolveVideoFiles, resolveMusicFile: resolveMusicFile, fetchJson: fetchJson, buildArticleHtml: buildArticleHtml, articleRel: articleRel };
+    window.__bdx = { state: S, start: start, buildJSON: buildJSON, buildCSV: buildCSV, buildPages: buildPages, makeZip: makeZip, loadAvatar: loadAvatarData, resolveVideoFiles: resolveVideoFiles, resolveMusicFile: resolveMusicFile, fetchJson: fetchJson, buildArticleHtml: buildArticleHtml, articleRel: articleRel, doZip: doZip };
 })();
